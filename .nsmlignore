@@ -8,3 +8,9 @@ checkpoint/
 *.ipynb
 GOOOAL_*/
 *.pkl
+*.txt
+*.md
+examples-hack/
+nsml
+nsml_client.linux.amd64.hack.tar.gz
+*.png

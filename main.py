@@ -184,12 +184,12 @@ if __name__ == '__main__':
     args = argparse.ArgumentParser()
 
     # hyperparameters
-    args.add_argument('--epochs', type=int, default=30)
+    args.add_argument('--total_epochs', type=int, default=30)
     args.add_argument('--batch_size', type=int, default=32)
     args.add_argument('--checkpoint', type=str, default=None)
     args.add_argument('--learning_rate', type=float, default=0.00045)
     args.add_argument('--optimizer', type=str, default='rmsprop')
-    args.add_argument('--train_mode', type=str, default='classification', metavar="classification / siamese / rmac")
+    args.add_argument('--train_mode', type=str, default='classification', metavar="classification / siamese / triple")
     args.add_argument('--model', type=str, default='vgg', metavar="vgg / xception")
     args.add_argument('--shape', type=int, default=256)
 
@@ -200,7 +200,7 @@ if __name__ == '__main__':
     config = args.parse_args()
 
     # training parameters
-    epochs = config.epochs
+    epochs = config.total_epochs
     batch_size = config.batch_size
     learning_rate = config.learning_rate
     classes = 1000
@@ -215,12 +215,13 @@ if __name__ == '__main__':
             vgg = VGG(input_shape=input_shape, classes=classes, mode='siamese')
             model = Siamese(input_shape=input_shape, model=vgg)
 
-        elif config.train_mode == 'rmac':
+        elif config.train_mode == 'triple':
             from get_regions import rmac_regions, get_size_vgg_feat_map
             vgg = VGG(input_shape=input_shape, classes=classes, mode='rmac')
             Wmap, Hmap = get_size_vgg_feat_map(config.shape, config.shape)
             regions = rmac_regions(Wmap, Hmap, 3)
-            model = RMAC(input_shape, vgg, len(regions))
+            rmac = RMAC(input_shape, vgg, len(regions))
+            model = Triple_Siamese((256, 256, 3), rmac, len(regions))
 
 
     elif config.model == 'xception':
@@ -380,7 +381,45 @@ if __name__ == '__main__':
                 # nsml.report(summary=True, epoch=epoch, epoch_total=epochs, loss=train_loss, acc=train_acc, recall=train_recall)
                 # nsml.save(epoch)
 
-        # elif config.train_mode == 'rmac':
+        elif config.train_mode == 'triple':
+            def triple_loss(y_true, y_pred):
+                return 0*y_true + y_pred
+            
+            model.compile(loss=triple_loss,
+                          optimizer=opt,
+                          metrics=['accuracy'])
+
+            """ Generator """
+            datalist = os.listdir(train_dataset_path)
+            train_generator = triple_generator(train_dataset_path, datalist, batch_size, input_shape)
+
+            """ Train Siamese Network """
+            print("━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Dataset Path       ┃   "+str(train_dataset_path))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Epochs             ┃   "+str(epochs))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Optimizer          ┃   "+config.optimizer)
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Learning Rate      ┃   "+str(learning_rate))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Input Shape        ┃   "+str(input_shape))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Batch Size         ┃   "+str(batch_size))
+            print("━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+            # for epoch in range(epochs):
+            #     print("---------------------")
+            #     print("     ", epoch+1, "Epoch")
+            #     print("---------------------")
+
+            res = model.fit_generator(train_generator,
+                                        steps_per_epoch=100,
+                                        epochs=epochs,
+                                        initial_epoch=0,
+                                        callbacks=callbacks,
+                                        verbose=1,
+                                        shuffle=True)
 
 
 

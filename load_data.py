@@ -9,39 +9,6 @@ import pickle
 import random
 import numpy as np
 
-# def generator(batch_size, train_dataset_path, input_shape, imglist):
-#     x_train = np.empty((batch_size, input_shape[0], input_shape[1], 3))
-#     y_train = []
-#     label_idx = 0
-#     while True:
-#         random.shuffle(imglist)
-#         for il in imglist:
-#             try:
-#                 img = cv2.imread(il, 1)
-#                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-#                 img = cv2.resize(img, input_shape)
-#                 label = il.split('/')[-2]
-#             except:
-#                 print(il)
-#                 continue
-
-#             x_train[label_idx] = img
-#             y_train.append(label)
-#             label_idx += 1
-
-#             if label_idx >= batch_size:
-#                 x_train = x_train.astype('float32')
-#                 x_train /= 255
-#                 y_train = np.array(y_train)
-#                 yield x_train, y_train
-
-#                 x_train = np.empty((batch_size, input_shape[0], input_shape[1], 3))
-#                 label_idx = 0
-
-
-
-
-
 def train_load1(data_path, img_size, output_path):
     label_list = []
     img_list = []
@@ -198,6 +165,52 @@ def siamese_generator(train_dataset_path, data_list, batch_size, input_shape):
 
         yield pair, target
         # yield pair[0].shape, pair[1].shape, target.shape
+
+
+def triple_generator(train_dataset_path, data_list, batch_size, input_shape):
+    def flip_img(query, relevant, irrelevant, flag):
+        if flag > 0.75:
+            query = cv2.flip(query, 0)
+            query = cv2.flip(query, 1)
+            relevant = cv2.flip(relevant, 0)
+            relevant = cv2.flip(relevant, 1)
+            irrelevant = cv2.flip(irrelevant, 0)
+            irrelevant = cv2.flip(irrelevant, 1)
+        elif flag > 0.5:
+            query = cv2.flip(query, 0)
+            relevant = cv2.flip(relevant, 0)
+            irrelevant = cv2.flip(irrelevant, 0)
+        elif flag > 0.25:
+            query = cv2.flip(query, 1)
+            relevant = cv2.flip(relevant, 1)
+            irrelevant = cv2.flip(irrelevant, 1)
+
+        return query, relevant, irrelevant
+
+    while True:
+        pair = [np.zeros((batch_size,)+input_shape) for i in range(3)]
+        target = np.zeros((batch_size, 1))
+        p = np.random.permutation(len(data_list))
+        for i in range(batch_size):
+            flag = random.random()
+            query_folder = os.path.join(train_dataset_path, data_list[p[i]])
+            irrelevant_folder = os.path.join(train_dataset_path, data_list[p[i+batch_size]])
+            query_list = os.listdir(query_folder)
+            irrelevant_list = os.listdir(irrelevant_folder)
+            random.shuffle(query_list)
+
+            query = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(query_folder, query_list[0]), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
+            relevant = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(query_folder, query_list[1]), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
+            irrelevant = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(irrelevant_folder, irrelevant_list[0]), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
+
+            pair[0][i], pair[1][i], pair[2][i] = flip_img(query, relevant, irrelevant, flag)
+            target[i][0] = 0
+
+            print(i, os.path.join(query_folder, query_list[0]), os.path.join(query_folder, query_list[1]), os.path.join(irrelevant_folder, irrelevant_list[0]))
+
+        # yield pair, target
+        yield pair[0].shape, pair[1].shape, pair[2].shape, len(target)
+
 
 if __name__ == '__main__':
     train_dataset_path = './dataset/train/train_data'

@@ -11,3 +11,7 @@ checkpoint/
 *.ipynb
 *.pkl
 *.asc
+*.txt
+nsml
+nsml_client.linux.amd64.hack.tar.gz
+examples-hack/

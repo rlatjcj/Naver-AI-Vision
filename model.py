@@ -205,9 +205,8 @@ def RMAC(input_shape=None, model=None, num_rois=None):
 
 def Triple_Siamese(input_shape=None, rmac=None, num_rois=None):
     def triplet_loss(q, r, ir, m=0.1):
-        
-        triplet = K.mean(m + K.square(q-r) + K.square(q-ir))
-        loss = K.max([0, triplet]) / 2
+        triplet = m + K.sum(K.square(q-r)) + K.sum(K.square(q-ir))
+        loss = K.maximum(0., triplet) / 2
         return loss
 
     query = Input(shape=input_shape, name='query')
@@ -220,8 +219,7 @@ def Triple_Siamese(input_shape=None, rmac=None, num_rois=None):
     irrelevant_feature = rmac([irrelevant, in_roi])
 
     loss = Lambda(lambda x: triplet_loss(*x))([query_feature, relevant_feature, irrelevant_feature])
-    loss = Activation(activation='linear')(loss)
-    model = Model([query_feature, relevant_feature, irrelevant_feature, in_roi], [loss])
+    model = Model([query, relevant, irrelevant, in_roi], [loss])
 
     return model
 
@@ -229,9 +227,11 @@ def Triple_Siamese(input_shape=None, rmac=None, num_rois=None):
 
 if __name__ == "__main__":
     from get_regions import rmac_regions, get_size_vgg_feat_map
+    from keras.utils.vis_utils import plot_model
     vgg = VGG((256, 256, 3), mode='rmac')
     Wmap, Hmap = get_size_vgg_feat_map(256, 256)
     regions = rmac_regions(Wmap, Hmap, 3)
     rmac = RMAC((256, 256, 3), vgg, len(regions))
     model = Triple_Siamese((256, 256, 3), rmac, len(regions))
     model.summary()
+    plot_model(model, './triple_siamese.png', True, True)
