@@ -189,6 +189,7 @@ def triple_generator(train_dataset_path, data_list, batch_size, input_shape, reg
 
     while True:
         pair = [np.zeros((batch_size,)+input_shape) for i in range(3)]
+        pair += [np.zeros((len(regions, 4)))]
         target = np.zeros((batch_size, 1))
         p = np.random.permutation(len(data_list))
         for i in range(batch_size):
@@ -204,7 +205,7 @@ def triple_generator(train_dataset_path, data_list, batch_size, input_shape, reg
             irrelevant = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(irrelevant_folder, irrelevant_list[0]), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
 
             pair[0][i], pair[1][i], pair[2][i] = flip_img(query, relevant, irrelevant, flag)
-            pair.append(np.array(regions))
+            pair[3][i] = np.array(regions)
             target[i][0] = 0
 
             # print(i, os.path.join(query_folder, query_list[0]), os.path.join(query_folder, query_list[1]), os.path.join(irrelevant_folder, irrelevant_list[0]))
