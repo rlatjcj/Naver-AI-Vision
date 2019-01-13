@@ -204,13 +204,13 @@ def triple_generator(train_dataset_path, data_list, batch_size, input_shape, reg
             irrelevant = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(irrelevant_folder, irrelevant_list[0]), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
 
             pair[0][i], pair[1][i], pair[2][i] = flip_img(query, relevant, irrelevant, flag)
-            pair.append(regions)
+            pair.append(np.array(regions))
             target[i][0] = 0
 
             # print(i, os.path.join(query_folder, query_list[0]), os.path.join(query_folder, query_list[1]), os.path.join(irrelevant_folder, irrelevant_list[0]))
 
         # yield pair, target
-        yield pair[0].shape, pair[1].shape, pair[2].shape, len(pair[3]), len(target)
+        yield pair[0].shape, pair[1].shape, pair[2].shape, pair[3].shape, target.shape
 
 
 if __name__ == '__main__':
