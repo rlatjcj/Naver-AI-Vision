@@ -167,7 +167,7 @@ def siamese_generator(train_dataset_path, data_list, batch_size, input_shape):
         # yield pair[0].shape, pair[1].shape, target.shape
 
 
-def triple_generator(train_dataset_path, data_list, batch_size, input_shape):
+def triple_generator(train_dataset_path, data_list, batch_size, input_shape, regions):
     def flip_img(query, relevant, irrelevant, flag):
         if flag > 0.75:
             query = cv2.flip(query, 0)
@@ -204,17 +204,21 @@ def triple_generator(train_dataset_path, data_list, batch_size, input_shape):
             irrelevant = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(irrelevant_folder, irrelevant_list[0]), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
 
             pair[0][i], pair[1][i], pair[2][i] = flip_img(query, relevant, irrelevant, flag)
+            pair.append(regions)
             target[i][0] = 0
 
-            print(i, os.path.join(query_folder, query_list[0]), os.path.join(query_folder, query_list[1]), os.path.join(irrelevant_folder, irrelevant_list[0]))
+            # print(i, os.path.join(query_folder, query_list[0]), os.path.join(query_folder, query_list[1]), os.path.join(irrelevant_folder, irrelevant_list[0]))
 
         # yield pair, target
-        yield pair[0].shape, pair[1].shape, pair[2].shape, len(target)
+        yield pair[0].shape, pair[1].shape, pair[2].shape, len(pair[3]), len(target)
 
 
 if __name__ == '__main__':
+    from get_regions import rmac_regions, get_size_vgg_feat_map
+    Wmap, Hmap = get_size_vgg_feat_map(512, 512)
+    regions = rmac_regions(Wmap, Hmap, 3)
     train_dataset_path = './dataset/train/train_data'
     datalist = os.listdir(train_dataset_path)
-    gen = siamese_generator(train_dataset_path, datalist, 16, (512, 512, 3))
+    gen = triple_generator(train_dataset_path, datalist, 16, (512, 512, 3), regions)
     for i in range(10):
         print(next(gen))

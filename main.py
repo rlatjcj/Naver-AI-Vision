@@ -66,19 +66,11 @@ def bind_model(model, config):
             train_r = np.empty((batch, config.shape, config.shape, 3))
             for q, qi in enumerate(query_img):
                 print('**********', q+1, '**********')
-                # qi = qi[np.newaxis,...]
                 i = 0
                 cnt = 0
                 for ri in reference_img:
                     train_q[i] = qi
                     train_r[i] = ri
-                    # ri = ri[np.newaxis,...]
-                    # if i == 0:
-                    #     train_q = qi
-                    #     train_r = ri
-                    # else:
-                    #     train_q = np.concatenate((train_q, qi), axis=0)
-                    #     train_r = np.concatenate((train_r, ri), axis=0)
                     i += 1
 
                     if i == batch:
@@ -125,6 +117,40 @@ def bind_model(model, config):
                 reference_vecs = reference_vecs.reshape(reference_vecs.shape[0], reference_vecs.shape[1] * reference_vecs.shape[2] * reference_vecs.shape[3])
                 with open(db_output, 'wb') as f:
                     pickle.dump(reference_vecs, f)
+
+            # l2 normalization
+            query_vecs = l2_normalize(query_vecs)
+            reference_vecs = l2_normalize(reference_vecs)
+
+            # Calculate cosine similarity
+            print(query_vecs.shape, reference_vecs.shape, reference_vecs.T.shape)
+            sim_matrix = np.dot(query_vecs, reference_vecs.T)
+
+        elif config.train_mode == 'triple':
+            get_feature_layer = K.function([model.layers[0].input] + [K.learning_phase()], [model.layers[-2].output])
+            # inference
+            batch = 128
+            for i in range(len(query_img)//batch):
+                if i == 0:
+                    query_vecs = get_feature_layer([query_img[:batch], 0])[0]
+                else:
+                    query_vecs = np.concatenate((query_vecs, get_feature_layer([query_img[i*batch:(i+1)*batch], 0])[0]))
+
+            if len(query_img) % batch != 0:
+                query_vecs = np.concatenate((query_vecs, get_feature_layer([query_img[(i+1)*batch:], 0])[0]))
+
+            query_vecs = query_vecs.reshape(query_vecs.shape[0], query_vecs.shape[1] * query_vecs.shape[2] * query_vecs.shape[3])
+
+            for i in range(len(reference_img)//batch):
+                if i == 0:
+                    reference_vecs = get_feature_layer([reference_img[:batch], 0])[0]
+                else:
+                    reference_vecs = np.concatenate((reference_vecs, get_feature_layer([reference_img[i*batch:(i+1)*batch], 0])[0]))
+
+            if len(reference_vecs) % batch != 0:
+                reference_vecs = np.concatenate((reference_vecs, get_feature_layer([reference_img[(i+1)*batch:], 0])[0]))
+
+            reference_vecs = reference_vecs.reshape(reference_vecs.shape[0], reference_vecs.shape[1] * reference_vecs.shape[2] * reference_vecs.shape[3])
 
             # l2 normalization
             query_vecs = l2_normalize(query_vecs)
@@ -383,7 +409,7 @@ if __name__ == '__main__':
 
         elif config.train_mode == 'triple':
             def triple_loss(y_true, y_pred):
-                return 0*y_true + y_pred
+                return y_pred
             
             model.compile(loss=triple_loss,
                           optimizer=opt,
@@ -391,7 +417,7 @@ if __name__ == '__main__':
 
             """ Generator """
             datalist = os.listdir(train_dataset_path)
-            train_generator = triple_generator(train_dataset_path, datalist, batch_size, input_shape)
+            train_generator = triple_generator(train_dataset_path, datalist, batch_size, input_shape, regions)
 
             """ Train Siamese Network """
             print("━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

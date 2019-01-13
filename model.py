@@ -218,8 +218,8 @@ def Triple_Siamese(input_shape=None, rmac=None, num_rois=None):
     relevant_feature = rmac([relevant, in_roi])
     irrelevant_feature = rmac([irrelevant, in_roi])
 
-    loss = Lambda(lambda x: triplet_loss(*x))([query_feature, relevant_feature, irrelevant_feature])
-    model = Model([query, relevant, irrelevant, in_roi], [loss])
+    # loss = Lambda(lambda x: triplet_loss(*x))([query_feature, relevant_feature, irrelevant_feature])
+    model = Model([query, relevant, irrelevant, in_roi], [query_feature, relevant_feature, irrelevant_feature])
 
     return model
 
@@ -234,4 +234,5 @@ if __name__ == "__main__":
     rmac = RMAC((256, 256, 3), vgg, len(regions))
     model = Triple_Siamese((256, 256, 3), rmac, len(regions))
     model.summary()
+    print(model.layers[-2])
     plot_model(model, './triple_siamese.png', True, True)
