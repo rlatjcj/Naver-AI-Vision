@@ -1,2 +1,10 @@
-__pycache__
-.git
+__pycache__/
+.git/
+dataset/
+nsml_client.linux.amd64.hack/
+checkpoint/
+.gitignore
+*.jpg
+*.ipynb
+GOOOAL_*/
+*.pkl

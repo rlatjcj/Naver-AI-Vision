@@ -1,0 +1,13 @@
+Data_example_ph1/
+nsml_client.linux.amd64.hack/
+GOOOAL_ir_ph1_*/
+weights/
+xception_weights_tf_dim_ordering_tf_kernels.h5
+*.png
+dataset/
+__pycache__/
+.ipynb_checkpoints/
+checkpoint/
+*.ipynb
+*.pkl
+*.asc
