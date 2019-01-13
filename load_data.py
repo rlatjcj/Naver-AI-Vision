@@ -189,7 +189,7 @@ def triple_generator(train_dataset_path, data_list, batch_size, input_shape, reg
 
     while True:
         pair = [np.zeros((batch_size,)+input_shape) for i in range(3)]
-        pair += [np.zeros((len(regions), 4))]
+        pair += [np.zeros((batch_size, len(regions), 4))]
         target = np.zeros((batch_size, 1))
         p = np.random.permutation(len(data_list))
         for i in range(batch_size):
