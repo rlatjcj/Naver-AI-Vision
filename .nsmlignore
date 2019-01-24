@@ -14,3 +14,4 @@ examples-hack/
 nsml
 nsml_client.linux.amd64.hack.tar.gz
 *.png
+*.asc

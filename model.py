@@ -226,13 +226,15 @@ def Triple_Siamese(input_shape=None, rmac=None, num_rois=None):
 
 
 if __name__ == "__main__":
-    from get_regions import rmac_regions, get_size_vgg_feat_map
-    from keras.utils.vis_utils import plot_model
-    vgg = VGG((256, 256, 3), mode='rmac')
-    Wmap, Hmap = get_size_vgg_feat_map(256, 256)
-    regions = rmac_regions(Wmap, Hmap, 3)
-    rmac = RMAC((256, 256, 3), vgg, len(regions))
-    model = Triple_Siamese((256, 256, 3), rmac, len(regions))
+    model = Xception((256, 256, 3))
     model.summary()
-    print(model.layers[-2])
-    plot_model(model, './triple_siamese.png', True, True)
+    # from get_regions import rmac_regions, get_size_vgg_feat_map
+    # from keras.utils.vis_utils import plot_model
+    # vgg = VGG((256, 256, 3), mode='rmac')
+    # Wmap, Hmap = get_size_vgg_feat_map(256, 256)
+    # regions = rmac_regions(Wmap, Hmap, 3)
+    # rmac = RMAC((256, 256, 3), vgg, len(regions))
+    # model = Triple_Siamese((256, 256, 3), rmac, len(regions))
+    # model.summary()
+    # print(model.layers[-2])
+    # plot_model(model, './triple_siamese.png', True, True)

@@ -210,8 +210,8 @@ def triple_generator(train_dataset_path, data_list, batch_size, input_shape, reg
 
             # print(i, os.path.join(query_folder, query_list[0]), os.path.join(query_folder, query_list[1]), os.path.join(irrelevant_folder, irrelevant_list[0]))
 
-        # yield pair, target
-        yield pair[0].shape, pair[1].shape, pair[2].shape, pair[3].shape, target.shape
+        yield pair, target
+        # yield len(pair), target.shape
 
 
 if __name__ == '__main__':
