@@ -18,8 +18,15 @@ from keras.layers import Conv2D, MaxPooling2D
 from keras.callbacks import ReduceLROnPlateau
 from keras.preprocessing.image import ImageDataGenerator
 
+from load_data import *
+from metrics import precision, recall, f1
+from model import *
+from callbacks import *
 
-def bind_model(model):
+SEED = 777
+np.random.seed(SEED)
+
+def bind_model(model, config):
     def save(dir_name):
         os.makedirs(dir_name, exist_ok=True)
         model.save_weights(os.path.join(dir_name, 'model'))
@@ -39,16 +46,40 @@ def bind_model(model):
         queries.sort()
         db.sort()
 
-        queries, query_vecs, references, reference_vecs = get_feature(model, queries, db)
+        queries, query_vecs, references, reference_vecs = get_feature(model, queries, db, config)
 
-        # l2 normalization
-        query_vecs = l2_normalize(query_vecs)
-        reference_vecs = l2_normalize(reference_vecs)
+        if config.train_mode == "classification":
+            # l2 normalization
+            # query_feature1 = l2_normalize(query_vecs[0])
+            # query_feature2 = l2_normalize(query_vecs[1])
+            # query_feature3 = l2_normalize(query_vecs[2])
+            
+            # query_feature2 = query_feature2.reshape(query_feature2.shape[0], query_feature2.shape[1] * query_feature2.shape[2] * query_feature2.shape[3])
+            # query_feature3 = query_feature3.reshape(query_feature3.shape[0], query_feature3.shape[1] * query_feature3.shape[2] * query_feature3.shape[3])
 
-        # Calculate cosine similarity
-        sim_matrix = np.dot(query_vecs, reference_vecs.T)
-        indices = np.argsort(sim_matrix, axis=1)
-        indices = np.flip(indices, axis=1)
+            # reference_feature1 = l2_normalize(reference_vecs[0])
+            # reference_feature2 = l2_normalize(reference_vecs[1])
+            # reference_feature3 = l2_normalize(reference_vecs[2])
+
+            # reference_feature2 = reference_feature2.reshape(reference_feature2.shape[0], reference_feature2.shape[1] * reference_feature2.shape[2] * reference_feature2.shape[3])
+            # reference_feature3 = reference_feature3.reshape(reference_feature3.shape[0], reference_feature3.shape[1] * reference_feature3.shape[2] * reference_feature3.shape[3])
+
+            # Calculate cosine similarity
+            # print(query_feature1.shape, reference_feature1.shape, reference_feature1.T.shape)
+            # print(query_feature2.shape, reference_feature2.shape, reference_feature2.T.shape)
+            # print(query_feature3.shape, reference_feature3.shape, reference_feature3.T.shape)
+            # sim_matrix1 = np.dot(query_feature1, reference_feature1.T)
+            # sim_matrix2 = np.dot(query_feature2, reference_feature2.T)
+            # sim_matrix3 = np.dot(query_feature3, reference_feature3.T)
+
+            # sim_matrix = sim_matrix1 + sim_matrix2 + sim_matrix3
+
+            query_feature = l2_normalize(query_vecs)
+            reference_feature = l2_normalize(reference_vecs)
+            sim_matrix = np.dot(query_feature, reference_feature.T)
+
+            indices = np.argsort(sim_matrix, axis=1)
+            indices = np.flip(indices, axis=1)
 
         retrieval_results = {}
 
@@ -73,34 +104,36 @@ def l2_normalize(v):
 
 
 # data preprocess
-def get_feature(model, queries, db):
-    img_size = (224, 224)
+def get_feature(model, queries, db, config):
+    batch_size = 32
+    target_size = (config.shape, config.shape)
     test_path = DATASET_PATH + '/test/test_data'
 
-    intermediate_layer_model = Model(inputs=model.input, outputs=model.get_layer('dense_2').output)
     test_datagen = ImageDataGenerator(rescale=1. / 255, dtype='float32')
     query_generator = test_datagen.flow_from_directory(
         directory=test_path,
-        target_size=(224, 224),
+        target_size=target_size,
         classes=['query'],
         color_mode="rgb",
-        batch_size=32,
+        batch_size=batch_size,
         class_mode=None,
         shuffle=False
     )
-    query_vecs = intermediate_layer_model.predict_generator(query_generator, steps=len(query_generator), verbose=1)
 
     reference_generator = test_datagen.flow_from_directory(
         directory=test_path,
-        target_size=(224, 224),
+        target_size=target_size,
         classes=['reference'],
         color_mode="rgb",
-        batch_size=32,
+        batch_size=batch_size,
         class_mode=None,
         shuffle=False
     )
-    reference_vecs = intermediate_layer_model.predict_generator(reference_generator, steps=len(reference_generator),
-                                                                verbose=1)
+
+    if config.train_mode == "classification":
+        intermediate_layer_model = Model(inputs=model.input, outputs=[model.layers[-1].output, model.layers[-4].output, model.layers[-7].output])
+        query_vecs = intermediate_layer_model.predict_generator(query_generator, steps=len(query_generator), verbose=1)
+        reference_vecs = intermediate_layer_model.predict_generator(reference_generator, steps=len(reference_generator), verbose=1)
 
     return queries, query_vecs, db, reference_vecs
 
@@ -109,9 +142,15 @@ if __name__ == '__main__':
     args = argparse.ArgumentParser()
 
     # hyperparameters
-    args.add_argument('--epoch', type=int, default=30)
+    args.add_argument('--epochs', type=int, default=30)
     args.add_argument('--batch_size', type=int, default=64)
     args.add_argument('--num_classes', type=int, default=1383)
+    args.add_argument('--checkpoint', type=str, default=None)
+    args.add_argument('--learning_rate', type=float, default=0.00045)
+    args.add_argument('--optimizer', type=str, default='rmsprop')
+    args.add_argument('--train_mode', type=str, default='classification', metavar="classification / siamese / triple")
+    args.add_argument('--model', type=str, default='vgg', metavar="vgg / xception")
+    args.add_argument('--shape', type=int, default=256)
 
     # DONOTCHANGE: They are reserved for nsml
     args.add_argument('--mode', type=str, default='train', help='submit일때 해당값이 test로 설정됩니다.')
@@ -121,36 +160,39 @@ if __name__ == '__main__':
     config = args.parse_args()
 
     # training parameters
-    nb_epoch = config.epoch
+    epochs = config.epochs
     batch_size = config.batch_size
     num_classes = config.num_classes
-    input_shape = (224, 224, 3)  # input image shape
+    learning_rate = config.learning_rate
+    input_shape = (config.shape, config.shape, 3)  # input image shape
 
     """ Model """
-    model = Sequential()
-    model.add(Conv2D(32, (3, 3), padding='same', input_shape=input_shape))
-    model.add(Activation('relu'))
-    model.add(Conv2D(32, (3, 3)))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
+    if config.model == 'vgg':
+        if config.train_mode == 'classification':
+            model = VGG(input_shape=input_shape, classes=num_classes)
 
-    model.add(Conv2D(64, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(Conv2D(64, (3, 3)))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
+        elif config.train_mode == 'siamese':
+            vgg = VGG(input_shape=input_shape, classes=num_classes, mode='siamese')
+            model = Siamese(input_shape=input_shape, model=vgg)
 
-    model.add(Flatten())
-    model.add(Dense(512))
-    model.add(Activation('relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(num_classes))
-    model.add(Activation('softmax'))
-    model.summary()
+        elif config.train_mode == 'triple':
+            from get_regions import rmac_regions, get_size_vgg_feat_map
+            vgg = VGG(input_shape=input_shape, classes=num_classes, mode='rmac')
+            Wmap, Hmap = get_size_vgg_feat_map(config.shape, config.shape)
+            regions = rmac_regions(Wmap, Hmap, 3)
+            rmac = RMAC(input_shape, vgg, len(regions))
+            model = Triple_Siamese((256, 256, 3), rmac, len(regions))
 
-    bind_model(model)
+
+    elif config.model == 'xception':
+        if config.train_mode == 'classification':
+            model = Xception(input_shape=input_shape, classes=num_classes)
+
+        elif config.train_mode == 'siamese':
+            xception = Xception(input_shape=input_shape, classes=num_classes, mode='siamese')
+            model = Siamese(input_shape=input_shape, model=xception)
+
+    bind_model(model, config)
 
     if config.pause:
         nsml.paused(scope=locals())
@@ -159,50 +201,123 @@ if __name__ == '__main__':
     if config.mode == 'train':
         bTrainmode = True
 
-        """ Initiate RMSprop optimizer """
-        opt = keras.optimizers.rmsprop(lr=0.00045, decay=1e-6)
-        model.compile(loss='categorical_crossentropy',
-                      optimizer=opt,
-                      metrics=['accuracy'])
+        nsml.load(checkpoint='13', session='GOOOAL/ir_ph2/19')
+        nsml.save('for_test')
+        exit()
+
+        """ Initiate optimizer """
+        if config.optimizer == 'rmsprop':
+            opt = keras.optimizers.rmsprop(lr=learning_rate, decay=1e-6)
+        elif config.optimizer == 'adam':
+            opt = keras.optimizers.adam(lr=learning_rate, decay=1e-6)
+        elif config.optimizer == 'sgd':
+            opt = keras.optimizers.sgd(lr=learning_rate, decay=1e-6)
 
         print('dataset path', DATASET_PATH)
-
-        train_datagen = ImageDataGenerator(
-            rescale=1. / 255,
-            shear_range=0.2,
-            zoom_range=0.2,
-            horizontal_flip=True)
-
-        train_generator = train_datagen.flow_from_directory(
-            directory=DATASET_PATH + '/train/train_data',
-            target_size=input_shape[:2],
-            color_mode="rgb",
-            batch_size=batch_size,
-            class_mode="categorical",
-            shuffle=True,
-            seed=42
-        )
+        train_dataset_path = DATASET_PATH + '/train/train_data'
 
         """ Callback """
         monitor = 'acc'
         reduce_lr = ReduceLROnPlateau(monitor=monitor, patience=3)
+        custom_nsml = CustomNSML(num_classes)
 
-        """ Training loop """
-        STEP_SIZE_TRAIN = train_generator.n // train_generator.batch_size
-        t0 = time.time()
-        for epoch in range(nb_epoch):
-            t1 = time.time()
-            res = model.fit_generator(generator=train_generator,
-                                      steps_per_epoch=STEP_SIZE_TRAIN,
-                                      initial_epoch=epoch,
-                                      epochs=epoch + 1,
-                                      callbacks=[reduce_lr],
-                                      verbose=1,
-                                      shuffle=True)
-            t2 = time.time()
-            print(res.history)
-            print('Training time for one epoch : %.1f' % ((t2 - t1)))
-            train_loss, train_acc = res.history['loss'][0], res.history['acc'][0]
-            nsml.report(summary=True, epoch=epoch, epoch_total=nb_epoch, loss=train_loss, acc=train_acc)
-            nsml.save(epoch)
-        print('Total training time : %.1f' % (time.time() - t0))
+        callbacks = [reduce_lr]
+
+        # train_datagen = ImageDataGenerator(
+        #     rescale=1. / 255,
+        #     shear_range=0.2,
+        #     zoom_range=0.2,
+        #     horizontal_flip=True)
+
+        # train_generator = train_datagen.flow_from_directory(
+        #     directory=DATASET_PATH + '/train/train_data',
+        #     target_size=input_shape[:2],
+        #     color_mode="rgb",
+        #     batch_size=batch_size,
+        #     class_mode="categorical",
+        #     shuffle=True,
+        #     seed=42
+        # )
+
+        # """ Callback """
+        # monitor = 'acc'
+        # reduce_lr = ReduceLROnPlateau(monitor=monitor, patience=3)
+
+        # """ Training loop """
+        # STEP_SIZE_TRAIN = train_generator.n // train_generator.batch_size
+        # t0 = time.time()
+        # for epoch in range(nb_epoch):
+        #     t1 = time.time()
+        #     res = model.fit_generator(generator=train_generator,
+        #                               steps_per_epoch=STEP_SIZE_TRAIN,
+        #                               initial_epoch=epoch,
+        #                               epochs=epoch + 1,
+        #                               callbacks=[reduce_lr],
+        #                               verbose=1,
+        #                               shuffle=True)
+        #     t2 = time.time()
+        #     print(res.history)
+        #     print('Training time for one epoch : %.1f' % ((t2 - t1)))
+        #     train_loss, train_acc = res.history['loss'][0], res.history['acc'][0]
+        #     nsml.report(summary=True, epoch=epoch, epoch_total=nb_epoch, loss=train_loss, acc=train_acc)
+        #     nsml.save(epoch)
+        # print('Total training time : %.1f' % (time.time() - t0))
+
+        if config.train_mode == 'classification':
+            model.compile(loss='categorical_crossentropy',
+                          optimizer=opt,
+                          metrics=['accuracy', precision, recall, f1])
+
+            """ Generator """
+            generator = ImageDataGenerator(rescale=1./255,
+                                        horizontal_flip=True,
+                                        vertical_flip=True)
+
+            train_generator = generator.flow_from_directory(directory=train_dataset_path,
+                                                            target_size=input_shape[:2],
+                                                            class_mode='categorical',
+                                                            batch_size=batch_size,
+                                                            shuffle=True,
+                                                            seed=SEED,
+                                                            subset='training',
+                                                            interpolation='bilinear')
+
+            print("━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Dataset Path       ┃   "+str(train_dataset_path))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Epochs             ┃   "+str(epochs))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Optimizer          ┃   "+config.optimizer)
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Learning Rate      ┃   "+str(learning_rate))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Batch Size         ┃   "+str(batch_size))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Input Shape        ┃   "+str(input_shape))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Train Samples      ┃   "+str(train_generator.samples))
+            print("━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+            """ Training loop """
+            STEP_SIZE_TRAIN = train_generator.n // train_generator.batch_size
+            t0 = time.time()
+            for epoch in range(epochs):
+                print("---------------------")
+                print("     ", epoch+1, "Epoch")
+                print("---------------------")
+                t1 = time.time()
+                res = model.fit_generator(train_generator,
+                                            steps_per_epoch=STEP_SIZE_TRAIN,
+                                            epochs=epoch+1,
+                                            initial_epoch=epoch,
+                                            max_queue_size=batch_size,
+                                            callbacks=callbacks,
+                                            verbose=1,
+                                            shuffle=True)
+                t2 = time.time()
+                print(res.history)
+                print('Training time for one epoch : %.1f' % ((t2 - t1)))
+                train_loss, train_acc, train_precision, train_recall, train_f1 = res.history['loss'][0], res.history['acc'][0], res.history['precision'][0], res.history['recall'][0], res.history['f1'][0]
+                nsml.report(summary=True, epoch=epoch, epoch_total=epochs, loss=train_loss, acc=train_acc, precision=train_precision, recall=train_recall, f1=train_f1)
+                nsml.save(epoch)
+            print('Total training time : %.1f' % (time.time() - t0))
