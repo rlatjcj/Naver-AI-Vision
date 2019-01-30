@@ -105,7 +105,7 @@ def l2_normalize(v):
 
 # data preprocess
 def get_feature(model, queries, db, config):
-    batch_size = 32
+    batch_size = 4
     target_size = (config.shape, config.shape)
     test_path = DATASET_PATH + '/test/test_data'
 
