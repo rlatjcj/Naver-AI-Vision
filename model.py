@@ -176,7 +176,7 @@ def Siamese(input_shape=None, model=None):
     refer_output = model(refer_input)
 
     both = Lambda(lambda x: K.abs(x[0]-x[1]))([query_output, refer_output])
-    prediction = Dense(2, activation='softmax')(both)
+    prediction = Dense(1, activation='sigmoid')(both)
     siamese_net = Model([query_input, refer_input], prediction, name='siamese')
 
     return siamese_net

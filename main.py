@@ -6,6 +6,7 @@ from __future__ import print_function
 import os
 import argparse
 import time
+import cv2
 
 import nsml
 import numpy as np
@@ -46,9 +47,9 @@ def bind_model(model, config):
         queries.sort()
         db.sort()
 
-        queries, query_vecs, references, reference_vecs = get_feature(model, queries, db, config)
-
         if config.train_mode == "classification":
+            queries, query_vecs, references, reference_vecs = get_feature(model, queries, db, config)
+            
             # l2 normalization
             # query_feature1 = l2_normalize(query_vecs[0])
             # query_feature2 = l2_normalize(query_vecs[1])
@@ -80,6 +81,33 @@ def bind_model(model, config):
 
             indices = np.argsort(sim_matrix, axis=1)
             indices = np.flip(indices, axis=1)
+
+        elif config.train_mode == 'siamese':
+            batch = 256
+            sim_matrix = np.zeros((len(queries), len(db)))
+            train_q = np.empty((batch, config.shape, config.shape, 3))
+            train_r = np.empty((batch, config.shape, config.shape, 3))
+            for q in len(queries):
+                print('**********', q+1, '**********')
+                query = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(test_path, q), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
+                
+                i = 0
+                cnt = 0
+                for d in len(db):
+                    train_q[i] = qi
+                    train_r[i] = ri
+                    i += 1
+
+                    if i == batch:
+                        score = model.predict_on_batch([train_q, train_r])[:,0]
+                        score = score.flatten()
+                        sim_matrix[q][cnt:cnt+batch] = score
+                        cnt += batch
+                        i = 0
+
+                score = model.predict_on_batch([train_q, train_r])[:,0]
+                score = score.flatten()
+                sim_matrix[q][cnt:] = score[:i]
 
         retrieval_results = {}
 
@@ -201,9 +229,9 @@ if __name__ == '__main__':
     if config.mode == 'train':
         bTrainmode = True
 
-        nsml.load(checkpoint='13', session='GOOOAL/ir_ph2/19')
-        nsml.save('for_test')
-        exit()
+        # nsml.load(checkpoint='13', session='GOOOAL/ir_ph2/19')
+        # nsml.save('for_test')
+        # exit()
 
         """ Initiate optimizer """
         if config.optimizer == 'rmsprop':
@@ -314,6 +342,53 @@ if __name__ == '__main__':
                                             callbacks=callbacks,
                                             verbose=1,
                                             shuffle=True)
+                t2 = time.time()
+                print(res.history)
+                print('Training time for one epoch : %.1f' % ((t2 - t1)))
+                train_loss, train_acc, train_precision, train_recall, train_f1 = res.history['loss'][0], res.history['acc'][0], res.history['precision'][0], res.history['recall'][0], res.history['f1'][0]
+                nsml.report(summary=True, epoch=epoch, epoch_total=epochs, loss=train_loss, acc=train_acc, precision=train_precision, recall=train_recall, f1=train_f1)
+                nsml.save(epoch)
+            print('Total training time : %.1f' % (time.time() - t0))
+
+        elif config.train_mode == 'siamese':
+            model.compile(loss='binary_crossentropy',
+                          optimizer=opt,
+                          metrics=['accuracy', recall])
+
+            """ Generator """
+            datalist = os.listdir(train_dataset_path)
+            train_generator = siamese_generator(train_dataset_path, datalist, batch_size, input_shape)
+
+            """ Train Siamese Network """
+            print("━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Dataset Path       ┃   "+str(train_dataset_path))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Epochs             ┃   "+str(epochs))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Optimizer          ┃   "+config.optimizer)
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Learning Rate      ┃   "+str(learning_rate))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Input Shape        ┃   "+str(input_shape))
+            print("━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("  Batch Size         ┃   "+str(batch_size))
+            print("━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+            t0 = time.time()
+            for epoch in range(epochs):
+                print("---------------------")
+                print("     ", epoch+1, "Epoch")
+                print("---------------------")
+                t1 = time.time()
+
+                res = model.fit_generator(train_generator,
+                                            steps_per_epoch=1000,
+                                            epochs=epoch+1,
+                                            initial_epoch=epoch,
+                                            callbacks=callbacks,
+                                            verbose=1,
+                                            shuffle=True)
+
                 t2 = time.time()
                 print(res.history)
                 print('Training time for one epoch : %.1f' % ((t2 - t1)))

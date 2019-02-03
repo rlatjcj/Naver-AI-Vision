@@ -58,10 +58,11 @@ def siamese_loader(train_dataset_path, data_list, order, input_shape):
     len_same_class = len(target_list[1:])
     
     pair = [np.zeros((len_same_class*2, input_shape[0], input_shape[1], 3)) for i in range(2)]
-    target = np.zeros((len_same_class*2, 2))
+    target = np.zeros((len_same_class*2, 1))
 
     target_img = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(target_folder, target_name), 1), cv2.COLOR_RGB2BGR), input_shape) / 255
 
+    # same
     for i in range(len_same_class):
         flag = random.random()
         compare_img = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(target_folder, target_list[i+1]), 1), cv2.COLOR_RGB2BGR), input_shape) / 255
@@ -79,9 +80,10 @@ def siamese_loader(train_dataset_path, data_list, order, input_shape):
 
         pair[0][i] = target_img
         pair[1][i] = compare_img
-        target[i][0] = 1
+        target[i] = 1
         # print(i, os.path.join(target_folder, target_img), os.path.join(target_folder, target_list[i+1]), target[i])
 
+    # different
     random.shuffle(datalist)
     for i in range(len_same_class, len_same_class*2):
         flag = random.random()
@@ -102,7 +104,7 @@ def siamese_loader(train_dataset_path, data_list, order, input_shape):
 
         pair[0][i] = target_img
         pair[1][i] = compare_img
-        target[i][1] = 1
+        target[i] = 0
         # print(i, os.path.join(target_folder, target_img), os.path.join(train_dataset_path, datalist[i], dif_class[0]), target[i])
 
     p = np.random.permutation(len_same_class*2)
@@ -130,7 +132,7 @@ def siamese_generator(train_dataset_path, data_list, batch_size, input_shape):
 
     while True:
         pair = [np.zeros((batch_size,)+input_shape) for i in range(2)]
-        target = np.zeros((batch_size, 2))
+        target = np.zeros((batch_size, 1))
         p = np.random.permutation(len(data_list))
         for i in range(batch_size//2):
             flag = random.random()
@@ -142,7 +144,7 @@ def siamese_generator(train_dataset_path, data_list, batch_size, input_shape):
             compare_img = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(target_folder, target_list[1]), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
 
             pair[0][i], pair[1][i] = flip_img(target_img, compare_img, flag)
-            target[i][0] = 1
+            target[i] = 1
 
         for i in range(batch_size//2, batch_size):
             flag = random.random()
@@ -157,7 +159,7 @@ def siamese_generator(train_dataset_path, data_list, batch_size, input_shape):
             compare_img = cv2.resize(cv2.cvtColor(cv2.imread(os.path.join(compare_folder, compare_list[0]), 1), cv2.COLOR_RGB2BGR), input_shape[:2]) / 255
 
             pair[0][i], pair[1][i] = flip_img(target_img, compare_img, flag)
-            target[i][1] = 1
+            target[i] = 0
 
         p = np.random.permutation(batch_size)
         pair[1] = pair[1][p]
